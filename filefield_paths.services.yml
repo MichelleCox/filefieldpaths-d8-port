@@ -1,0 +1,3 @@
+services:
+  filefield_paths.process_string:
+    class: Drupal\filefield_paths\FilefieldPathsProcessString

@@ -1,5 +1,9 @@
 <?php
 
+// @TODO: Make string processing a proper service.
+// This is just the existing string processing tossed into a class. It hasn't
+// had any additional work done, yet.
+
 class FilefieldPathsProcessString {
   /**
    * Process and cleanup strings.

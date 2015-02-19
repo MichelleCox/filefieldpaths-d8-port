@@ -4,6 +4,8 @@
  * Drush integration.
  */
 
+// @TODO: The drush integration will likely need to be completely redone.
+
 /**
  * Implements hook_drush_command().
  */

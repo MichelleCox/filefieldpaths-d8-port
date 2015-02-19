@@ -6,6 +6,11 @@
 
 use Drupal\Core\Url;
 
+//@TODO: Replace the include files.
+// The File, Image, and Video include files are implementing
+// hook_filefield_paths_field_type_info() on their behalf. That should be
+// replaced with a plugin. The other includes should just be integrated into the
+// rest of the code.
 /**
  * Include additional files.
  */
@@ -18,33 +23,55 @@ foreach (\Drupal::moduleHandler()->getModuleList() as $module) {
   }
 }
 
+// @TODO: Get additional settings into the new config system.
+// In D7, settings added to the form ended up with all the other settings
+// in a blob in the field_config_instance table. This seems to happen
+// automatically. In D8, fields are entities and the settings are part of the
+// new config system and simply adding settings to the form is not enough to
+// get them saved.
+
 /**
  * Implements hook_form_alter().
  */
 function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state, $form_id) {
+  // This gets a list of all the field types from enabled modules that responded
+  // to the hook_filefield_paths_field_type_info() invocation. This hook is
+  // currently implemented on behalf of File, Image, and Video in the include
+  // files under the "modules" directory.
   $field_types = _filefield_paths_get_field_types();
+
   if (isset($form['#field']) && in_array($form['#field']->type, array_keys($field_types))) {
- //   $entity_type = $form['#entity']->entityTypeId;
+    // @TODO: Replace hardcoded entity type.
+    // This was hardcoded because I haven't found a way to get the entity
+    // type from the form. $form['#entity']->entityTypeId; gets me the bundle,
+    // such as "article" rather than "node".
     $entity_type = 'node';
+
     $entity_info = \Drupal::entityManager()->getDefinition($entity_type);
+
+    // This looks like it is supposed to hold the existing data for the settings
+    // but it doesn't work as it is never set. Additionally, it doesn't appear
+    // that the native File Field settings are stored in this spot, either.
+    // @TODO: Make retrieving settings work once saving them works.
     $settings = isset($form['#field']->settings['filefield_paths']) ? $form['#field']->settings['filefield_paths'] : array();
 
-    $form['field']->settings['filefield_paths_enabled'] = array(
+    // @TODO: Hiding directory field doesn't work.
+    // Hide standard File directory field.
+    $form['field']['settings']['file_directory']['#states'] = array(
+      'visible' => array(
+        ':input[name="form[settings][filefield_paths_enabled]"]' => array('checked' => FALSE),
+      ),
+    );
+
+    $form['field']['settings']['filefield_paths_enabled'] = array(
       '#type' => 'checkbox',
       '#title' => t('Enable File (Field) Paths?'),
       '#default_value' => isset($form['#field']->settings['filefield_paths_enabled']) ? $form['#field']->settings['filefield_paths_enabled'] : TRUE,
       '#weight' => 1,
     );
 
-    // Hide standard File directory field.
-    $form['field']->settings['file_directory']['#states'] = array(
-      'visible' => array(
-        ':input[name="form[settings][filefield_paths_enabled]"]' => array('checked' => FALSE),
-      ),
-    );
-
     // File (Field) Paths fieldset element.
-    $form['field']->settings['filefield_paths'] = array(
+    $form['field']['settings']['filefield_paths'] = array(
       '#type' => 'fieldset',
       '#title' => t('File (Field) Path settings'),
       '#collapsible' => TRUE,
@@ -58,11 +85,13 @@ function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface
       ),
     );
 
-    // Additional File (Field) Paths widget fields.
+    // Retrieve settings for "File Path" and "File Name" and any others that
+    // implement this hook and then add additional settings for each of them.
+    // @TODO: Move settings array out of include file.
     $fields = \Drupal::moduleHandler()->invokeAll('filefield_paths_field_settings');
     foreach ($fields as $name => $field) {
       // Attach widget fields.
-      $form['field']->settings['filefield_paths'][$name] = array(
+      $form['field']['settings']['filefield_paths'][$name] = array(
         '#type' => 'container',
       );
 
@@ -70,7 +99,7 @@ function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface
       if (isset($field['form']) && is_array($field['form'])) {
         $token_type_property = 'token type';
         foreach (array_keys($field['form']) as $delta => $key) {
-          $form['field']->settings['filefield_paths'][$name][$key] = array_merge_recursive(
+          $form['field']['settings']['filefield_paths'][$name][$key] = array_merge_recursive(
             $field['form'][$key],
             array(
               '#element_validate' => array('token_element_validate'),
@@ -80,12 +109,12 @@ function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface
 
           // Fetch stored value from instance.
           if (isset($settings[$name][$key])) {
-            $form['field']->settings['filefield_paths'][$name][$key]['#default_value'] = $settings[$name][$key];
+            $form['field']['settings']['filefield_paths'][$name][$key]['#default_value'] = $settings[$name][$key];
           }
         }
 
         // Field options.
-        $form['field']->settings['filefield_paths'][$name]['options'] = array(
+        $form['field']['settings']['filefield_paths'][$name]['options'] = array(
           '#type' => 'fieldset',
           '#title' => t('@title options', array('@title' => t($field['title']))),
           '#collapsible' => TRUE,
@@ -96,7 +125,7 @@ function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface
           ),
         );
 
-        // @TODO - Make this more modular.
+        // @TODO - Make this more modular (this TODO is from D7).
         // Cleanup field with Pathauto module.
         if (\Drupal::moduleHandler()->moduleExists('pathauto')) {
           $pathauto_enabled = TRUE;
@@ -113,7 +142,7 @@ function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface
           $default_value = FALSE;
         }
 
-        $form['field']->settings['filefield_paths'][$name]['options']['pathauto'] = array(
+        $form['field']['settings']['filefield_paths'][$name]['options']['pathauto'] = array(
           '#type' => 'checkbox',
           '#title' => t('Cleanup using Pathauto'),
           '#default_value' => $default_value,
@@ -122,7 +151,7 @@ function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface
         );
 
         // Transliterate field with Transliteration module.
-        $form['field']->settings['filefield_paths'][$name]['options']['transliterate'] = array(
+        $form['field']['settings']['filefield_paths'][$name]['options']['transliterate'] = array(
           '#type' => 'checkbox',
           '#title' => t('Transliterate'),
           '#default_value' => isset($settings[$name]['options']['transliterate']) && \Drupal::moduleHandler()->moduleExists('transliteration')
@@ -133,17 +162,18 @@ function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface
         );
 
         // Replacement patterns for field.
-        $form['field']->settings['filefield_paths']['token_tree'] = array(
+        $form['field']['settings']['filefield_paths']['token_tree'] = array(
           '#type' => 'fieldset',
           '#title' => t('Replacement patterns'),
           '#collapsible' => TRUE,
           '#collapsed' => TRUE,
-          '#description' => _theme('token_tree', array('token_types' => array('file', $entity_info['token type']))),
+          // @TODO: _theme does not exist anymore. Find new method of getting token list.
+          // '#description' => _theme('token_tree', array('token_types' => array('file', $entity_info['token type']))),
           '#weight' => 10,
         );
 
         // Retroactive updates.
-        $form['field']->settings['filefield_paths']['retroactive_update'] = array(
+        $form['field']['settings']['filefield_paths']['retroactive_update'] = array(
           '#type' => 'checkbox',
           '#title' => t('Retroactive update'),
           '#description' => t('Move and rename previously uploaded files.') . '<div>' . t('<strong class="warning">Warning:</strong> This feature should only be used on developmental servers or with extreme caution.') . '</div>',
@@ -151,7 +181,7 @@ function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface
         );
 
         // Active updating.
-        $form['field']->settings['filefield_paths']['active_updating'] = array(
+        $form['field']['settings']['filefield_paths']['active_updating'] = array(
           '#type' => 'checkbox',
           '#title' => t('Active updating'),
           '#default_value' => isset($settings['active_updating']) ? $settings['active_updating'] : FALSE,
@@ -161,7 +191,8 @@ function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface
       }
     }
 
-    $form['#submit'][] = 'filefield_paths_form_submit';
+    // @TODO: Uncomment this when retroactive updates are working.
+    // $form['#submit'][] = 'filefield_paths_form_submit';
   }
 }
 
@@ -169,78 +200,14 @@ function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface
  * Submit callback for File (Field) Paths settings form.
  */
 function filefield_paths_form_submit($form, &$form_state) {
+  // TODO: Make retroactive updates work.
+  /*
   // Retroactive updates.
   if ($form_state['values']['instance']['settings']['filefield_paths_enabled'] && $form_state['values']['instance']['settings']['filefield_paths']['retroactive_update']) {
     filefield_paths_batch_update($form_state['values']['instance']);
     batch_process($form_state['redirect']);
   }
-}
-
-/**
- * Set batch process to update File (Field) Paths.
- *
- * @param $instance
- */
-function filefield_paths_batch_update($instance) {
-  $query = new EntityFieldQuery();
-  $result = $query->entityCondition('entity_type', $instance['entity_type'])
-    ->entityCondition('bundle', array($instance['bundle']))
-    ->fieldCondition($instance['field_name'])
-    ->execute();
-  $objects = array_keys($result[$instance['entity_type']]);
-
-  // Create batch.
-  $batch = array(
-    'title' => t('Updating File (Field) Paths'),
-    'operations' => array(
-      array('_filefield_paths_batch_update_process', array($objects, $instance))
-    ),
-  );
-  batch_set($batch);
-}
-
-/**
- *
- */
-function _filefield_paths_batch_update_process($objects, $instance, &$context) {
-  if (!isset($context['sandbox']['progress'])) {
-    $context['sandbox']['progress'] = 0;
-    $context['sandbox']['max'] = count($objects);
-    $context['sandbox']['objects'] = $objects;
-  }
-
-  // Process nodes by groups of 5.
-  $count = min(5, count($context['sandbox']['objects']));
-  for ($i = 1; $i <= $count; $i++) {
-    // For each oid, load the object, update the files and save it.
-    $oid = array_shift($context['sandbox']['objects']);
-    $entity = current(\Drupal::entityManager()->getStorage($instance['entity_type'], array($oid)));
-
-    // Enable active updating if it isn't already enabled.
-    $active_updating = $instance['settings']['filefield_paths']['active_updating'];
-    if (!$active_updating) {
-      $instance['settings']['filefield_paths']['active_updating'] = TRUE;
-      $instance->save();
-    }
-
-    // Invoke File (Field) Paths implementation of hook_entity_update().
-    filefield_paths_entity_update($entity, $instance['entity_type']);
-
-    // Restore active updating to it's previous state if necessary.
-    if (!$active_updating) {
-      $instance['settings']['filefield_paths']['active_updating'] = $active_updating;
-      $instance->save();
-    }
-
-    // Update our progress information.
-    $context['sandbox']['progress']++;
-  }
-
-  // Inform the batch engine that we are not finished,
-  // and provide an estimation of the completion level we reached.
-  if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
-    $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
-  }
+  */
 }
 
 /**
@@ -253,45 +220,44 @@ function filefield_paths_entity_insert($entity, $type) {
 /**
  * Implements hook_entity_update().
  */
-/*
+
+// @TODO This entire function needs changing to new Entity Field API.
 function filefield_paths_entity_update($entity, $type) {
   $processed = FALSE;
   $field_types = _filefield_paths_get_field_types();
   $entity_info = \Drupal::entityManager()->getDefinition($type);
   $bundle_name = !empty($entity_info['entity keys']['bundle']) ? $entity->{$entity_info['entity keys']['bundle']} : $type;
   if ($entity_info['fieldable']) {
-    // @FIXME
+
 // Fields and field instances are now exportable configuration entities, and
 // the Field Info API has been removed.
-// 
-// 
-// @see https://www.drupal.org/node/2012896
-// foreach (field_info_fields($type, $bundle_name) as $field) {
-//       if (in_array($field['type'], array_keys($field_types))) {
-//         $files = array();
-//         $instance = field_info_instance($type, $field['field_name'], $bundle_name);
-//         $enabled = (isset($instance['settings']['filefield_paths_enabled']) && $instance['settings']['filefield_paths_enabled']) || !isset($instance['settings']['filefield_paths_enabled']);
-//         if ($enabled && isset($entity->{$field['field_name']})) {
-//           foreach ($entity->{$field['field_name']} as $langcode => &$deltas) {
-//             foreach ($deltas as $delta => &$file) {
-//               // Prepare file.
-//               if (function_exists($function = "{$field['module']}_field_load")) {
-//                 $items = array(array(&$file));
-//                 $function($type, array($entity), $field, array($instance), $langcode, $items, FIELD_LOAD_CURRENT);
-//               }
-//               $files[] = &$file;
-//             }
-//             // Invoke hook_filefield_paths_process_file().
-//             foreach (\Drupal::moduleHandler()->getImplementations('filefield_paths_process_file') as $module) {
-//               if (function_exists($function = "{$module}_filefield_paths_process_file")) {
-//                 $processed = TRUE;
-//                 $function($type, $entity, $field, $instance, $langcode, $files);
-//               }
-//             }
-//           }
-//         }
-//       }
-//     }
+/// @see https://www.drupal.org/node/2012896
+ foreach (field_info_fields($type, $bundle_name) as $field) {
+       if (in_array($field['type'], array_keys($field_types))) {
+         $files = array();
+         $instance = field_info_instance($type, $field['field_name'], $bundle_name);
+         $enabled = (isset($instance['settings']['filefield_paths_enabled']) && $instance['settings']['filefield_paths_enabled']) || !isset($instance['settings']['filefield_paths_enabled']);
+         if ($enabled && isset($entity->{$field['field_name']})) {
+           foreach ($entity->{$field['field_name']} as $langcode => &$deltas) {
+             foreach ($deltas as $delta => &$file) {
+               // Prepare file.
+               if (function_exists($function = "{$field['module']}_field_load")) {
+                 $items = array(array(&$file));
+                 $function($type, array($entity), $field, array($instance), $langcode, $items, FIELD_LOAD_CURRENT);
+               }
+               $files[] = &$file;
+             }
+             // Invoke hook_filefield_paths_process_file().
+             foreach (\Drupal::moduleHandler()->getImplementations('filefield_paths_process_file') as $module) {
+               if (function_exists($function = "{$module}_filefield_paths_process_file")) {
+                 $processed = TRUE;
+                 $function($type, $entity, $field, $instance, $langcode, $files);
+               }
+             }
+           }
+         }
+       }
+     }
 
 
     if ($processed) {
@@ -300,7 +266,7 @@ function filefield_paths_entity_update($entity, $type) {
     }
   }
 }
-*/
+
 /**
  * Implements hook_file_presave().
  */

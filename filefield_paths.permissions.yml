@@ -1,0 +1,4 @@
+#Define the administer permission for the File (Field) Paths config entity.
+'administer file field paths':
+  title: 'Administer File (Field) Paths'
+  description: Configure paths for files.

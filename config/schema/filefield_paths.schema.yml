@@ -1,0 +1,19 @@
+# Schema for the configuration files of the File (Field) Paths module.
+# @TODO: This is a simplified version just to get something working.
+
+filefield_paths.filepath.*:
+  type: mapping
+  label: 'File Path'
+  mapping:
+    file_id:
+      type: string
+      label: 'File id'
+    enabled:
+      type: boolean
+      label: 'Enabled'
+    path:
+      type: string
+      label: 'Path'
+    filename:
+      type: string
+      path: 'Filename'

@@ -1,0 +1,11 @@
+entity.filepath.config_form:
+#  path: 'admin/structure/types/manage/{type}/fields/{field}/filepath'
+  path: test/filepath/{id}
+  defaults:
+    _title: 'FileField Paths Settings'
+    _entity_form: filepath.config
+#  requirements:
+    # This uses our entity access controller.
+    # @see \Drupal\Core\Entity\EntityAccessCheck
+  #  _entity_access: filepath.config
+

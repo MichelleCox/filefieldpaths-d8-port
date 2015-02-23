@@ -1,0 +1,5 @@
+# Add the configuration page to the field settings form.
+
+filefield_paths.filepath_config:
+  class: \Drupal\Core\Menu\LocalActionDefault
+  deriver: \Drupal\field_ui\Plugin\Derivative\FieldUiLocalAction

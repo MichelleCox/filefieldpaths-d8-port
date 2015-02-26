@@ -6,6 +6,7 @@
 
 use Drupal\Core\Url;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Entity\EntityInterface;
 
 //@TODO: Replace the include files.
 // The File, Image, and Video include files are implementing
@@ -36,7 +37,7 @@ function filefield_paths_form_field_ui_field_edit_form_alter(array &$form, FormS
   // files under the "modules" directory.
   $field_types = _filefield_paths_get_field_types();
 
-  if (isset($form['#field']) && in_array($form['#field']->type, array_keys($field_types))) {
+  if (isset($field->field_type) && in_array($field->field_type, array_keys($field_types))) {
     // @TODO: Hiding directory field doesn't work.
     // Hide standard File directory field.
     $form['field']['settings']['file_directory']['#states'] = array(
@@ -172,7 +173,8 @@ function filefield_paths_entity_insert($entity, $type) {
  */
 
 // @TODO This entire function needs changing to new Entity Field API.
-function filefield_paths_entity_update($entity, $type) {
+function filefield_paths_entity_update(EntityInterface $entity) {
+$x=1;
   /*
   $processed = FALSE;
   $field_types = _filefield_paths_get_field_types();
@@ -216,7 +218,7 @@ function filefield_paths_entity_update($entity, $type) {
       field_attach_update($type, $entity);
     }
   }
-  */
+*/
 }
 
 /**
@@ -227,23 +229,6 @@ function filefield_paths_file_presave($file) {
   if (empty($file->origname) && isset($file->filename)) {
     $file->origname = $file->filename;
   }
-}
-
-function filefield_paths_get_token_tree($types) {
-  $output = '<dl>';
-  $token_tree = array(
-    '#theme' => 'token_tree',
-    '#token_types' => $types,
-    '#click_insert' => TRUE,
-    // @TODO: Find out what this "restricted" is and if it should be FALSE.
-    '#show_restricted' => TRUE,
-  );
-
-  $renderer = \Drupal::service('renderer');
-  $output .= '<dd>' . $renderer->render($token_tree) . '</dd>';
-  $output .= '</dl>';
-
-  return $output;
 }
 
 function filefield_paths_pathauto_element($setting, $default) {

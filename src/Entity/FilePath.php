@@ -28,10 +28,14 @@ use Drupal\Core\Config\Entity\ConfigEntityBase;
  *     "id" = "id",
  *   },
  *   links = {
- *     "config-form" = "/admin/structure/types/manage/{type}/fields/{field}/filepath",
+ *     "config-form" = "test/filepath/{id}",
  *   }
  * )
  */
+
+//  *   links = {
+//*     "config-form" = "/admin/structure/types/manage/{type}/fields/{field}/filepath",
+
 class FilePath extends ConfigEntityBase {
 
   /**

@@ -5,6 +5,7 @@
  */
 
 use Drupal\Core\Url;
+use Drupal\Core\Form\FormStateInterface;
 
 //@TODO: Replace the include files.
 // The File, Image, and Video include files are implementing
@@ -23,17 +24,12 @@ foreach (\Drupal::moduleHandler()->getModuleList() as $module) {
   }
 }
 
-// @TODO: Get additional settings into the new config system.
-// In D7, settings added to the form ended up with all the other settings
-// in a blob in the field_config_instance table. This seems to happen
-// automatically. In D8, fields are entities and the settings are part of the
-// new config system and simply adding settings to the form is not enough to
-// get them saved.
-
 /**
- * Implements hook_form_alter().
+ * Implements hook_form_FORM_ID_alter() for 'field_ui_field_edit_form'.
  */
-function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state, $form_id) {
+function filefield_paths_form_field_ui_field_edit_form_alter(array &$form, FormStateInterface $form_state) {
+  $field = $form_state->get('field');
+
   // This gets a list of all the field types from enabled modules that responded
   // to the hook_filefield_paths_field_type_info() invocation. This hook is
   // currently implemented on behalf of File, Image, and Video in the include
@@ -41,155 +37,109 @@ function filefield_paths_form_alter(&$form, \Drupal\Core\Form\FormStateInterface
   $field_types = _filefield_paths_get_field_types();
 
   if (isset($form['#field']) && in_array($form['#field']->type, array_keys($field_types))) {
-    // @TODO: Replace hardcoded entity type.
-    // This was hardcoded because I haven't found a way to get the entity
-    // type from the form. $form['#entity']->entityTypeId; gets me the bundle,
-    // such as "article" rather than "node".
-    $entity_type = 'node';
-
-    $entity_info = \Drupal::entityManager()->getDefinition($entity_type);
-
-    // This looks like it is supposed to hold the existing data for the settings
-    // but it doesn't work as it is never set. Additionally, it doesn't appear
-    // that the native File Field settings are stored in this spot, either.
-    // @TODO: Make retrieving settings work once saving them works.
-    $settings = isset($form['#field']->settings['filefield_paths']) ? $form['#field']->settings['filefield_paths'] : array();
-
     // @TODO: Hiding directory field doesn't work.
     // Hide standard File directory field.
     $form['field']['settings']['file_directory']['#states'] = array(
       'visible' => array(
-        ':input[name="form[settings][filefield_paths_enabled]"]' => array('checked' => FALSE),
+        ':input[name="form[field][third_party_settings][filefield_paths][enabled]"]' => array('checked' => FALSE),
       ),
     );
 
-    $form['field']['settings']['filefield_paths_enabled'] = array(
+    // FFP fieldset.
+    $form['field']['third_party_settings']['filefield_paths'] = array(
+      '#type' => 'details',
+      '#title' => t('File (Field) Paths settings'),
+      '#open' => TRUE,
+    );
+
+    // Enable / disable.
+    $default = $field->getThirdPartySetting('filefield_paths', 'enabled', TRUE);
+    $form['field']['third_party_settings']['filefield_paths']['enabled'] = array(
       '#type' => 'checkbox',
       '#title' => t('Enable File (Field) Paths?'),
-      '#default_value' => isset($form['#field']->settings['filefield_paths_enabled']) ? $form['#field']->settings['filefield_paths_enabled'] : TRUE,
-      '#weight' => 1,
+      '#default_value' => $default,
+      '#weight' => -10,
     );
 
-    // File (Field) Paths fieldset element.
-    $form['field']['settings']['filefield_paths'] = array(
-      '#type' => 'fieldset',
-      '#title' => t('File (Field) Path settings'),
-      '#collapsible' => TRUE,
-      '#collapsed' => TRUE,
-      '#weight' => 1,
-      '#tree' => TRUE,
-      '#states' => array(
-        'visible' => array(
-          ':input[name="field[settings][filefield_paths_enabled]"]' => array('checked' => TRUE),
-        ),
-      ),
+    // Token browser.
+    $form['field']['third_party_settings']['filefield_paths']['token_tree'] = array(
+      '#type' => '#markup',
+      '#theme' => 'token_tree_link',
+      '#weight' => -5,
     );
 
-    // Retrieve settings for "File Path" and "File Name" and any others that
-    // implement this hook and then add additional settings for each of them.
-    // @TODO: Move settings array out of include file.
-    $fields = \Drupal::moduleHandler()->invokeAll('filefield_paths_field_settings');
-    foreach ($fields as $name => $field) {
-      // Attach widget fields.
-      $form['field']['settings']['filefield_paths'][$name] = array(
-        '#type' => 'container',
-      );
+    // File path.
+    $default = $field->getThirdPartySetting('filefield_paths', 'filepath', '');
+    $form['field']['third_party_settings']['filefield_paths']['filepath'] = array(
+      '#type' => 'textfield',
+      '#title' => t('File path'),
+      '#maxlength' => 512,
+      '#size' => 128,
+      '#element_validate' => array('_file_generic_settings_file_directory_validate'),
+      '#default_value' => $default,
+    );
 
-      // Attach widget field form elements.
-      if (isset($field['form']) && is_array($field['form'])) {
-        $token_type_property = 'token type';
-        foreach (array_keys($field['form']) as $delta => $key) {
-          $form['field']['settings']['filefield_paths'][$name][$key] = array_merge_recursive(
-            $field['form'][$key],
-            array(
-              '#element_validate' => array('token_element_validate'),
-              '#token_types' => array('file', $entity_info->$token_type_property),
-            )
-          );
+    // @TODO: Make sure the options save with the extra array depth.
+    // File path options fieldset.
+    $form['field']['third_party_settings']['filefield_paths']['path_options'] = array(
+      '#type' => 'details',
+      '#title' => t('File path options'),
+      '#open' => FALSE,
+    );
 
-          // Fetch stored value from instance.
-          if (isset($settings[$name][$key])) {
-            $form['field']['settings']['filefield_paths'][$name][$key]['#default_value'] = $settings[$name][$key];
-          }
-        }
+    // Clean up path with Pathauto.
+    $default = $field->getThirdPartySetting('filefield_paths', 'pathauto_path', FALSE);
+    $form['field']['third_party_settings']['filefield_paths']['path_options']['pathauto_path'] = filefield_paths_pathauto_element('filepath', $default);
 
-        // Field options.
-        $form['field']['settings']['filefield_paths'][$name]['options'] = array(
-          '#type' => 'fieldset',
-          '#title' => t('@title options', array('@title' => t($field['title']))),
-          '#collapsible' => TRUE,
-          '#collapsed' => TRUE,
-          '#weight' => 1,
-          '#attributes' => array(
-            'class' => array("{$name} cleanup")
-          ),
-        );
+    // Clean up path with Transliteration
+    $default = $field->getThirdPartySetting('filefield_paths', 'transliteration_path', FALSE);
+    $form['field']['third_party_settings']['filefield_paths']['path_options']['transliteration_path'] = filefield_paths_transliteration_element('filepath', $default);
 
-        // @TODO - Make this more modular (this TODO is from D7).
-        // Cleanup field with Pathauto module.
-        if (\Drupal::moduleHandler()->moduleExists('pathauto')) {
-          $pathauto_enabled = TRUE;
-          $description = t('Cleanup %title using <a href="@pathauto">Pathauto settings</a>.', array(
-            '%title' => t($field['title']),
-            '@pathauto' => Url::fromRoute('pathauto.settings.form')));
-          $default_value = isset($settings[$name]['options']['pathauto'])
-            ? $settings[$name]['options']['pathauto']
-            : FALSE;
-        }
-        else {
-          $pathauto_enabled = FALSE;
-          $description = t('Pathauto is not installed');
-          $default_value = FALSE;
-        }
+    // File name.
+    $default = $field->getThirdPartySetting('filefield_paths', 'filename', '[file:ffp-name-only-original].[file:ffp-extension-original]');
+    $form['field']['third_party_settings']['filefield_paths']['filename'] = array(
+      '#type' => 'textfield',
+      '#title' => t('File name'),
+      '#maxlength' => 512,
+      '#size' => 128,
+      '#element_validate' => array('_file_generic_settings_file_directory_validate'),
+      '#default_value' => $default,
+    );
 
-        $form['field']['settings']['filefield_paths'][$name]['options']['pathauto'] = array(
-          '#type' => 'checkbox',
-          '#title' => t('Cleanup using Pathauto'),
-          '#default_value' => $default_value,
-          '#description' =>$description,
-          '#disabled' => !$pathauto_enabled,
-        );
+    // File name options fieldset.
+    $form['field']['third_party_settings']['filefield_paths']['name_options'] = array(
+      '#type' => 'details',
+      '#title' => t('File name options'),
+      '#open' => FALSE,
+    );
 
-        // Transliterate field with Transliteration module.
-        $form['field']['settings']['filefield_paths'][$name]['options']['transliterate'] = array(
-          '#type' => 'checkbox',
-          '#title' => t('Transliterate'),
-          '#default_value' => isset($settings[$name]['options']['transliterate']) && \Drupal::moduleHandler()->moduleExists('transliteration')
-            ? $settings[$name]['options']['transliterate']
-            : 0,
-          '#description' => t('Provides one-way string transliteration (romanization) and cleans the %title during upload by replacing unwanted characters.', array('%title' => t($field['title']))),
-          '#disabled' => !\Drupal::moduleHandler()->moduleExists('transliteration'),
-        );
+    // Clean up filename with Pathauto.
+    $default = $field->getThirdPartySetting('filefield_paths', 'pathauto_filename', FALSE);
+    $form['field']['third_party_settings']['filefield_paths']['name_options']['pathauto_filename'] = filefield_paths_pathauto_element('filename', $default);
 
-        // Replacement patterns for field.
-        $form['field']['settings']['filefield_paths']['token_tree'] = array(
-          '#type' => 'fieldset',
-          '#title' => t('Replacement patterns'),
-          '#collapsible' => TRUE,
-          '#collapsed' => TRUE,
-          // @TODO: _theme does not exist anymore. Find new method of getting token list.
-          // '#description' => _theme('token_tree', array('token_types' => array('file', $entity_info['token type']))),
-          '#weight' => 10,
-        );
+    // Clean up filename with Transliteration.
+    $default = $field->getThirdPartySetting('filefield_paths', 'transliteration_filename', FALSE);
+    $form['field']['third_party_settings']['filefield_paths']['name_options']['transliteration_filename'] = filefield_paths_transliteration_element('filename', $default);
 
-        // Retroactive updates.
-        $form['field']['settings']['filefield_paths']['retroactive_update'] = array(
-          '#type' => 'checkbox',
-          '#title' => t('Retroactive update'),
-          '#description' => t('Move and rename previously uploaded files.') . '<div>' . t('<strong class="warning">Warning:</strong> This feature should only be used on developmental servers or with extreme caution.') . '</div>',
-          '#weight' => 11,
-        );
+    // Retroactive updates.
+    $default = $field->getThirdPartySetting('filefield_paths', 'retroactive_update', FALSE);
+    $form['field']['third_party_settings']['filefield_paths']['retroactive_update'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Retroactive update'),
+      '#description' => t('Move and rename previously uploaded files.') . '<div>' . t('<strong class="warning">Warning:</strong> This feature should only be used on developmental servers or with extreme caution.') . '</div>',
+      '#weight' => 11,
+      '#default_value' => $default,
+    );
 
-        // Active updating.
-        $form['field']['settings']['filefield_paths']['active_updating'] = array(
-          '#type' => 'checkbox',
-          '#title' => t('Active updating'),
-          '#default_value' => isset($settings['active_updating']) ? $settings['active_updating'] : FALSE,
-          '#description' => t('Actively move and rename previously uploaded files as required.') . '<div>' . t('<strong class="warning">Warning:</strong> This feature should only be used on developmental servers or with extreme caution.') . '</div>',
-          '#weight' => 12
-        );
-      }
-    }
+    // Active updating.
+    $default = $field->getThirdPartySetting('filefield_paths', 'active_updating', FALSE);
+    $form['field']['third_party_settings']['filefield_paths']['active_updating'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Active updating'),
+      '#default_value' => $default,
+      '#description' => t('Actively move and rename previously uploaded files as required.') . '<div>' . t('<strong class="warning">Warning:</strong> This feature should only be used on developmental servers or with extreme caution.') . '</div>',
+      '#weight' => 12
+    );
 
     // @TODO: Uncomment this when retroactive updates are working.
     // $form['#submit'][] = 'filefield_paths_form_submit';
@@ -223,6 +173,7 @@ function filefield_paths_entity_insert($entity, $type) {
 
 // @TODO This entire function needs changing to new Entity Field API.
 function filefield_paths_entity_update($entity, $type) {
+  /*
   $processed = FALSE;
   $field_types = _filefield_paths_get_field_types();
   $entity_info = \Drupal::entityManager()->getDefinition($type);
@@ -265,6 +216,7 @@ function filefield_paths_entity_update($entity, $type) {
       field_attach_update($type, $entity);
     }
   }
+  */
 }
 
 /**
@@ -275,6 +227,67 @@ function filefield_paths_file_presave($file) {
   if (empty($file->origname) && isset($file->filename)) {
     $file->origname = $file->filename;
   }
+}
+
+function filefield_paths_get_token_tree($types) {
+  $output = '<dl>';
+  $token_tree = array(
+    '#theme' => 'token_tree',
+    '#token_types' => $types,
+    '#click_insert' => TRUE,
+    // @TODO: Find out what this "restricted" is and if it should be FALSE.
+    '#show_restricted' => TRUE,
+  );
+
+  $renderer = \Drupal::service('renderer');
+  $output .= '<dd>' . $renderer->render($token_tree) . '</dd>';
+  $output .= '</dl>';
+
+  return $output;
+}
+
+function filefield_paths_pathauto_element($setting, $default) {
+  if (\Drupal::moduleHandler()->moduleExists('pathauto')) {
+    $pathauto_enabled = TRUE;
+    $description = t('Cleanup %setting using <a href="@pathauto">Pathauto settings</a>.', array(
+      '%setting' => $setting,
+      '@pathauto' => Url::fromRoute('pathauto.settings.form')));
+    $default_value = $default;
+  }
+  else {
+    $pathauto_enabled = FALSE;
+    $description = t('Pathauto is not installed');
+    $default_value = FALSE;
+  }
+
+  return array(
+    '#type' => 'checkbox',
+    '#title' => t('Cleanup using Pathauto'),
+    '#default_value' => $default_value,
+    '#description' => $description,
+    '#disabled' => !$pathauto_enabled,
+  );
+}
+
+function filefield_paths_transliteration_element($setting, $default) {
+  if (\Drupal::moduleHandler()->moduleExists('transliteration')) {
+    $transliteration_enabled = TRUE;
+    $description = t('Provides one-way string transliteration (romanization) and cleans the %setting during upload by replacing unwanted characters.', array('%setting' => $setting));
+    $default_value = $default;
+  }
+  else {
+    $transliteration_enabled = FALSE;
+    $description = t('Transliteration is not installed');
+    $default_value = FALSE;
+  }
+
+  return array(
+    '#type' => 'checkbox',
+    '#title' => t('Cleanup using Transliteration'),
+    '#default_value' => $default_value,
+    '#description' => $description,
+    '#disabled' => !$transliteration_enabled,
+  );
 }
 
 /**

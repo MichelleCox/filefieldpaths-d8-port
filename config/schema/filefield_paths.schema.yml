@@ -1,19 +1,34 @@
-# Schema for the configuration files of the File (Field) Paths module.
-# @TODO: This is a simplified version just to get something working.
+# Schema for the File (Field) Paths module.
+# @TODO: Pathauto/Transliteration may need additional indenting.
 
-filefield_paths.filepath.*:
+field_config.third_party.filefield_paths:
   type: mapping
-  label: 'File Path'
+  label: 'FileField Path settings'
   mapping:
-    file_id:
-      type: string
-      label: 'File id'
     enabled:
       type: boolean
       label: 'Enabled'
-    path:
+    filepath:
       type: string
       label: 'Path'
+    pathauto_path:
+      type: boolean
+      label: 'Path clean with Pathauto'
+    transliteration_path:
+      type: boolean
+      label: 'Transliterate path'
     filename:
       type: string
-      path: 'Filename'
+      label: 'Filename'
+    pathauto_name:
+      type: boolean
+      label: 'Filename clean with Pathauto'
+    transliteration_name:
+      type: boolean
+      label: 'Transliterate filename'
+    retroactive_update:
+      type: boolean
+      label: 'Retroactive'
+    active_updating:
+      type: boolean
+      label: 'Active'

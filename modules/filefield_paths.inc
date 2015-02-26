@@ -8,6 +8,7 @@
  * Implements hook_filefield_paths_field_settings().
  */
 function filefield_paths_filefield_paths_field_settings() {
+  // @TODO: This is no longer used.
   return array(
     'file_path' => array(
       'title' => 'File path',

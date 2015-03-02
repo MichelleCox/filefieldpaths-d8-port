@@ -7,6 +7,10 @@
 use Drupal\Core\Url;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Config\Entity\ThirdPartySettingsInterface;
+use Drupal\image\Plugin\Field\FieldType\ImageItem;
+
 
 //@TODO: Replace the include files.
 // The File, Image, and Video include files are implementing
@@ -80,7 +84,6 @@ function filefield_paths_form_field_ui_field_edit_form_alter(array &$form, FormS
       '#default_value' => $default,
     );
 
-    // @TODO: Make sure the options save with the extra array depth.
     // File path options fieldset.
     $form['field']['third_party_settings']['filefield_paths']['path_options'] = array(
       '#type' => 'details',
@@ -164,73 +167,159 @@ function filefield_paths_form_submit($form, &$form_state) {
 /**
  * Implements hook_entity_insert().
  */
-function filefield_paths_entity_insert($entity, $type) {
-  filefield_paths_entity_update($entity, $type);
+function filefield_paths_entity_insert(EntityInterface $entity) {
+  filefield_paths_process_entity($entity);
 }
 
 /**
  * Implements hook_entity_update().
  */
-
-// @TODO This entire function needs changing to new Entity Field API.
 function filefield_paths_entity_update(EntityInterface $entity) {
-$x=1;
-  /*
-  $processed = FALSE;
-  $field_types = _filefield_paths_get_field_types();
-  $entity_info = \Drupal::entityManager()->getDefinition($type);
-  $bundle_name = !empty($entity_info['entity keys']['bundle']) ? $entity->{$entity_info['entity keys']['bundle']} : $type;
-  if ($entity_info['fieldable']) {
+  filefield_paths_process_entity($entity);
+}
 
-// Fields and field instances are now exportable configuration entities, and
-// the Field Info API has been removed.
-/// @see https://www.drupal.org/node/2012896
- foreach (field_info_fields($type, $bundle_name) as $field) {
-       if (in_array($field['type'], array_keys($field_types))) {
-         $files = array();
-         $instance = field_info_instance($type, $field['field_name'], $bundle_name);
-         $enabled = (isset($instance['settings']['filefield_paths_enabled']) && $instance['settings']['filefield_paths_enabled']) || !isset($instance['settings']['filefield_paths_enabled']);
-         if ($enabled && isset($entity->{$field['field_name']})) {
-           foreach ($entity->{$field['field_name']} as $langcode => &$deltas) {
-             foreach ($deltas as $delta => &$file) {
-               // Prepare file.
-               if (function_exists($function = "{$field['module']}_field_load")) {
-                 $items = array(array(&$file));
-                 $function($type, array($entity), $field, array($instance), $langcode, $items, FIELD_LOAD_CURRENT);
-               }
-               $files[] = &$file;
-             }
-             // Invoke hook_filefield_paths_process_file().
-             foreach (\Drupal::moduleHandler()->getImplementations('filefield_paths_process_file') as $module) {
-               if (function_exists($function = "{$module}_filefield_paths_process_file")) {
-                 $processed = TRUE;
-                 $function($type, $entity, $field, $instance, $langcode, $files);
-               }
-             }
-           }
-         }
-       }
-     }
+function filefield_paths_process_entity(EntityInterface $entity) {
+  if ($entity instanceof ContentEntityInterface) {
+    // Get a list of the types of fields that have files. (File, integer, video)
+    $field_types = _filefield_paths_get_field_types();
 
+    // Get a list of the fields on this entity.
+    $fields = $entity->getFields();
 
-    if ($processed) {
-      $entity->original = isset($entity->original) ? $entity->original : NULL;
-      field_attach_update($type, $entity);
+    // Iterate through all the fields looking for ones in our list.
+    foreach ($fields as $key => $field) {
+      // Get the field definition which holds the type and our settings.
+      $field_info = $field->getFieldDefinition();
+
+      // Get the field type, ie: file.
+      $field_type = $field_info->getType();
+
+      // Check the field type against our list of fields.
+      if (isset($field_type) && in_array($field_type, array_keys($field_types))) {
+        if ($field_info instanceof ThirdPartySettingsInterface) {
+          // Retrieve the settings we added to the field.
+          $ffp_settings = $field_info->getThirdPartySettings('filefield_paths');
+
+          // If FFP is enabled on this field, process it.
+          if ($ffp_settings['enabled']) {
+
+            // @TODO: Make this work with fields with cardinality > 1.
+
+            // Get the machine name of the field.
+            $field_name = $field_info->field_name;
+
+            // Get the file entity associated with the field.
+            // @TODO: This is necessary with image fields. Check other field types.
+            $file_entity = $entity->{$field_name}[0]->entity;
+
+            filefield_paths_process_field($entity, $ffp_settings, $file_entity);
+
+          }
+        }
+      }
     }
   }
-*/
+}
+
+// @TODO: Move this to the service?
+function filefield_paths_process_field($entity, $ffp_settings, $file_entity) {
+  // Get the service which will do the actual processing.
+  $ffp_service = \Drupal::service('filefield_paths.process_string');
+
+  // Retrieve the path/name strings with the tokens from settings.
+  $path_setting = $ffp_settings['filepath'];
+  $name_setting = $ffp_settings['filename'];
+
+  // Retrieve the current path/name from the file entity.
+  // @TODO: This may not be needed. Keeping for now for future use.
+  $current_path = $file_entity->getFileURI();
+  $current_name = $file_entity->getFileName();
+
+  // @TODO: Add in PathAuto and Transliteration.
+  // @TODO: Make this work for more than node tokens.
+  // We need some way of determining what entities are needed to send the
+  // proper data in for the Token service to work.
+  $data = array('node' => $entity, 'file' => $file_entity);
+  $new_path = $ffp_service->tokenReplace($path_setting, $data);
+  $new_name = $ffp_service->tokenReplace($name_setting, $data);
+
+  // @TODO: Move the file to the new location.
+  // @TODO: Store the original file name?
+}
+
+// @TODO: Remove this once it's replaced with the new processing code.
+// This is the original function that is in the process of being absorbed into
+// function filefield_paths_process_field().
+/**
+ * Implements hook_filefield_paths_process_file().
+ */
+function filefield_paths_filefield_paths_process_file($type, $entity, $field, $instance, $langcode, &$items) {
+  if (isset($instance['settings']['filefield_paths'])) {
+    $settings = $instance['settings']['filefield_paths'];
+    foreach ($items as &$file) {
+      if (filefield_paths_uri_is_local($file['uri']) && ($file['timestamp'] == REQUEST_TIME || $settings['active_updating'])) {
+        $token_data = array(
+          'file' => (object) $file,
+          $type => $entity
+        );
+
+        // Copy the original file for comparison purposes.
+        $old_file = $file;
+
+        // Process filename.
+        $settings['file_name']['options']['context'] = 'file_name';
+        $file['filename'] = !empty($settings['file_name']['value'])
+          ? filefield_paths_process_string($settings['file_name']['value'], $token_data, $settings['file_name']['options'])
+          : $file['filename'];
+
+        // Process filepath.
+        $settings['file_path']['options']['context'] = 'file_path';
+        $file['uri'] = "{$field['settings']['uri_scheme']}://" . ltrim(filefield_paths_process_string($settings['file_path']['value'], $token_data, $settings['file_path']['options']) . "/{$file['filename']}", '/');
+
+        // Finalize file if necessary.
+        if ($file !== $old_file) {
+          $dirname = drupal_dirname($file['uri']);
+          if (file_prepare_directory($dirname, FILE_CREATE_DIRECTORY) && file_move((object) $old_file, $file['uri'])) {
+            // Process regular expression.
+            _filefield_paths_replace_path($old_file['uri'], $file['uri'], $entity);
+
+            // Remove any old empty directories.
+            $scheme = file_uri_scheme($old_file['uri']);
+            $paths = explode('/', str_replace("{$scheme}://", '', drupal_dirname($old_file['uri'])));
+            while ($paths) {
+              if (@drupal_rmdir("{$scheme}://" . implode('/', $paths)) == TRUE) {
+                array_pop($paths);
+                continue;
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
  * Implements hook_file_presave().
  */
 function filefield_paths_file_presave($file) {
+  // @TODO: Original code kept for reference until it is absorbed.
   // Store original filename in the database.
   if (empty($file->origname) && isset($file->filename)) {
     $file->origname = $file->filename;
   }
 }
 
+/**
+ * Returns the form element for the PathAuto checkbox in FFP settings.
+ *
+ * @param $setting
+ *   File path or File name.
+ * @param $default
+ *   Default or existing value for the form element.
+ * @return array
+ */
 function filefield_paths_pathauto_element($setting, $default) {
   if (\Drupal::moduleHandler()->moduleExists('pathauto')) {
     $pathauto_enabled = TRUE;
@@ -254,6 +343,15 @@ function filefield_paths_pathauto_element($setting, $default) {
   );
 }
 
+/**
+ * Returns the form element for the Transliteration checkbox in FFP settings.
+ *
+ * @param $setting
+ *   File path or File name.
+ * @param $default
+ *   Default or existing value for the form element.
+ * @return array
+ */
 function filefield_paths_transliteration_element($setting, $default) {
   if (\Drupal::moduleHandler()->moduleExists('transliteration')) {
     $transliteration_enabled = TRUE;
@@ -279,6 +377,8 @@ function filefield_paths_transliteration_element($setting, $default) {
  * Run regular expression over all available text-based fields.
  */
 function _filefield_paths_replace_path($old, $new, $entity) {
+  // @TODO: Original code kept for reference until it is absorbed.
+
   // Build regular expression.
   $info = parse_url(file_stream_wrapper_uri_normalize($old));
   $info['path'] = !empty($info['path']) ? $info['path'] : '';
@@ -329,6 +429,7 @@ function _filefield_paths_replace_path($old, $new, $entity) {
  * in the same format.
  */
 function _filefield_paths_replace_path_uri_scheme($prefix, $old, $new) {
+  // @TODO: Original code kept for reference until it is absorbed.
   switch (TRUE) {
     case $prefix == file_uri_scheme($old) . '://':
       return file_uri_scheme($new) . '://';
@@ -350,6 +451,7 @@ function _filefield_paths_replace_path_uri_scheme($prefix, $old, $new) {
  * one appropriate for the new file URI.
  */
 function _filefield_paths_replace_image_derivative_token($old_uri, $new_uri, $query_string, $token, $style_name) {
+  // @TODO: Original code kept for reference until it is absorbed.
   // Only replace the token if the old one was valid.
   if ($query_string && $token && $style_name && $token === image_style_path_token($style_name, $old_uri)) {
     return substr_replace($query_string, image_style_path_token($style_name, $new_uri), -strlen($token));
@@ -364,6 +466,7 @@ function _filefield_paths_replace_image_derivative_token($old_uri, $new_uri, $qu
  * @return array
  */
 function _filefield_paths_get_field_types($reset = FALSE) {
+  // @TODO: Original code kept for reference until it is absorbed.
   $field_types = &drupal_static(__FUNCTION__);
 
   if (empty($field_types) || $reset) {
@@ -390,6 +493,7 @@ function _filefield_paths_get_field_types($reset = FALSE) {
  *   TRUE if the uri is using a local stream wrapper, or FALSE otherwise.
  */
 function filefield_paths_uri_is_local($uri) {
+  // @TODO: Original code kept for reference until it is absorbed.
   $scheme = file_uri_scheme($uri);
   $wrappers = \Drupal::service("stream_wrapper_manager")->getWrappers(STREAM_WRAPPERS_LOCAL);
   return !empty($wrappers[$scheme]) && empty($wrappers[$scheme]['remote']);

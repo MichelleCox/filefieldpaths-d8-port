@@ -1,3 +1,6 @@
+@TODO: Update this for Drupal 8.
+@TODO: Change to markdown?
+
 The File (Field) Paths module extends the default functionality of Drupals core
 File module, Image module and many other File upload modules, by adding the
 ability to use entity based tokens in destination paths and filenames.

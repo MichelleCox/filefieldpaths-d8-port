@@ -9,7 +9,6 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Config\Entity\ThirdPartySettingsInterface;
-use Drupal\image\Plugin\Field\FieldType\ImageItem;
 
 
 //@TODO: Replace the include files.
@@ -35,6 +34,9 @@ foreach (\Drupal::moduleHandler()->getModuleList() as $module) {
 function filefield_paths_form_field_ui_field_edit_form_alter(array &$form, FormStateInterface $form_state) {
   $field = $form_state->get('field');
 
+  // Get our 3rd party settings to use as defaults on the form.
+  $defaults = $field->getThirdPartySettings('filefield_paths');
+
   // This gets a list of all the field types from enabled modules that responded
   // to the hook_filefield_paths_field_type_info() invocation. This hook is
   // currently implemented on behalf of File, Image, and Video in the include
@@ -58,11 +60,10 @@ function filefield_paths_form_field_ui_field_edit_form_alter(array &$form, FormS
     );
 
     // Enable / disable.
-    $default = $field->getThirdPartySetting('filefield_paths', 'enabled', TRUE);
     $form['field']['third_party_settings']['filefield_paths']['enabled'] = array(
       '#type' => 'checkbox',
       '#title' => t('Enable File (Field) Paths?'),
-      '#default_value' => $default,
+      '#default_value' => $defaults['enabled'],
       '#weight' => -10,
     );
 
@@ -74,14 +75,13 @@ function filefield_paths_form_field_ui_field_edit_form_alter(array &$form, FormS
     );
 
     // File path.
-    $default = $field->getThirdPartySetting('filefield_paths', 'filepath', '');
     $form['field']['third_party_settings']['filefield_paths']['filepath'] = array(
       '#type' => 'textfield',
       '#title' => t('File path'),
       '#maxlength' => 512,
       '#size' => 128,
       '#element_validate' => array('_file_generic_settings_file_directory_validate'),
-      '#default_value' => $default,
+      '#default_value' => $defaults['filepath'],
     );
 
     // File path options fieldset.
@@ -92,15 +92,13 @@ function filefield_paths_form_field_ui_field_edit_form_alter(array &$form, FormS
     );
 
     // Clean up path with Pathauto.
-    $default = $field->getThirdPartySetting('filefield_paths', 'pathauto_path', FALSE);
-    $form['field']['third_party_settings']['filefield_paths']['path_options']['pathauto_path'] = filefield_paths_pathauto_element('filepath', $default);
+    $form['field']['third_party_settings']['filefield_paths']['path_options']['pathauto_path'] = filefield_paths_pathauto_element('filepath', $defaults['path_options']['pathauto_path']);
 
     // Clean up path with Transliteration
-    $default = $field->getThirdPartySetting('filefield_paths', 'transliteration_path', FALSE);
-    $form['field']['third_party_settings']['filefield_paths']['path_options']['transliteration_path'] = filefield_paths_transliteration_element('filepath', $default);
+    $form['field']['third_party_settings']['filefield_paths']['path_options']['transliteration_path'] = filefield_paths_transliteration_element('filepath', $defaults['path_options']['transliteration_path']);
 
     // File name.
-    $default = $field->getThirdPartySetting('filefield_paths', 'filename', '[file:ffp-name-only-original].[file:ffp-extension-original]');
+    $default = (empty($defaults['filename'])) ? '[file:ffp-name-only-original].[file:ffp-extension-original]' : $defaults['filename'];
     $form['field']['third_party_settings']['filefield_paths']['filename'] = array(
       '#type' => 'textfield',
       '#title' => t('File name'),
@@ -118,29 +116,25 @@ function filefield_paths_form_field_ui_field_edit_form_alter(array &$form, FormS
     );
 
     // Clean up filename with Pathauto.
-    $default = $field->getThirdPartySetting('filefield_paths', 'pathauto_filename', FALSE);
-    $form['field']['third_party_settings']['filefield_paths']['name_options']['pathauto_filename'] = filefield_paths_pathauto_element('filename', $default);
+    $form['field']['third_party_settings']['filefield_paths']['name_options']['pathauto_filename'] = filefield_paths_pathauto_element('filename', $defaults['name_options']['pathauto_filename']);
 
     // Clean up filename with Transliteration.
-    $default = $field->getThirdPartySetting('filefield_paths', 'transliteration_filename', FALSE);
-    $form['field']['third_party_settings']['filefield_paths']['name_options']['transliteration_filename'] = filefield_paths_transliteration_element('filename', $default);
+    $form['field']['third_party_settings']['filefield_paths']['name_options']['transliteration_filename'] = filefield_paths_transliteration_element('filename', $defaults['name_options']['transliteration_filename']);
 
     // Retroactive updates.
-    $default = $field->getThirdPartySetting('filefield_paths', 'retroactive_update', FALSE);
     $form['field']['third_party_settings']['filefield_paths']['retroactive_update'] = array(
       '#type' => 'checkbox',
       '#title' => t('Retroactive update'),
       '#description' => t('Move and rename previously uploaded files.') . '<div>' . t('<strong class="warning">Warning:</strong> This feature should only be used on developmental servers or with extreme caution.') . '</div>',
       '#weight' => 11,
-      '#default_value' => $default,
+      '#default_value' => $defaults['retroactive_update'],
     );
 
     // Active updating.
-    $default = $field->getThirdPartySetting('filefield_paths', 'active_updating', FALSE);
     $form['field']['third_party_settings']['filefield_paths']['active_updating'] = array(
       '#type' => 'checkbox',
       '#title' => t('Active updating'),
-      '#default_value' => $default,
+      '#default_value' => $defaults['active_updating'],
       '#description' => t('Actively move and rename previously uploaded files as required.') . '<div>' . t('<strong class="warning">Warning:</strong> This feature should only be used on developmental servers or with extreme caution.') . '</div>',
       '#weight' => 12
     );
@@ -203,17 +197,18 @@ function filefield_paths_process_entity(EntityInterface $entity) {
           // If FFP is enabled on this field, process it.
           if ($ffp_settings['enabled']) {
 
-            // @TODO: Make this work with fields with cardinality > 1.
-
             // Get the machine name of the field.
             $field_name = $field_info->field_name;
 
-            // Get the file entity associated with the field.
-            // @TODO: This is necessary with image fields. Check other field types.
-            $file_entity = $entity->{$field_name}[0]->entity;
+            // Go through each item on the field.
+            foreach ($entity->{$field_name} as $item) {
+              // Get the file entity associated with the item.
+              // @TODO: This is necessary with image fields. Check other field types.
+              $file_entity = $item->entity;
 
-            filefield_paths_process_field($entity, $ffp_settings, $file_entity);
-
+              // Process the file.
+              filefield_paths_process_file($entity, $ffp_settings, $file_entity);
+            }
           }
         }
       }
@@ -221,8 +216,11 @@ function filefield_paths_process_entity(EntityInterface $entity) {
   }
 }
 
-// @TODO: Move this to the service?
-function filefield_paths_process_field($entity, $ffp_settings, $file_entity) {
+// @TODO: Make a FileFieldPathsManager service.
+// This service would be given the content entity (ie: node), the file entity,
+// and the FFP settings for the field. It would contain all the functions
+// needed to process and move all the files for a given field.
+function filefield_paths_process_file($entity, $ffp_settings, $file_entity) {
   // Get the service which will do the actual processing.
   $ffp_service = \Drupal::service('filefield_paths.process_string');
 
@@ -230,21 +228,43 @@ function filefield_paths_process_field($entity, $ffp_settings, $file_entity) {
   $path_setting = $ffp_settings['filepath'];
   $name_setting = $ffp_settings['filename'];
 
-  // Retrieve the current path/name from the file entity.
-  // @TODO: This may not be needed. Keeping for now for future use.
-  $current_path = $file_entity->getFileURI();
-  $current_name = $file_entity->getFileName();
-
-  // @TODO: Add in PathAuto and Transliteration.
-  // @TODO: Make this work for more than node tokens.
+  // Replace tokens.
+  // @TODO: Make this work for more than node and file tokens.
   // We need some way of determining what entities are needed to send the
   // proper data in for the Token service to work.
+  // Perform token replacement.
   $data = array('node' => $entity, 'file' => $file_entity);
   $new_path = $ffp_service->tokenReplace($path_setting, $data);
   $new_name = $ffp_service->tokenReplace($name_setting, $data);
 
-  // @TODO: Move the file to the new location.
-  // @TODO: Store the original file name?
+  // Clean with PathAuto.
+  if (!$ffp_settings['path_options']['pathauto_path']) {
+    $path_segments = explode("/", $new_path);
+    $cleaned_segments = array();
+    foreach ($path_segments as $segment) {
+      $cleaned_segments[] = $ffp_service->pathAutoClean($segment);
+    }
+    $new_path = implode("/", $cleaned_segments);
+  }
+
+  if (!$ffp_settings['name_options']['pathauto_filename']) {
+    $name_parts = pathinfo($new_name);
+    $cleaned_base = $ffp_service->pathAutoClean($name_parts['filename']);
+    $cleaned_extension = $ffp_service->pathAutoClean($name_parts['extension']);
+
+    $new_name = $cleaned_base . '.' . $cleaned_extension;
+  }
+
+  // Transliterate.
+  // @TODO: Make transliteration work.
+  if (!$ffp_settings['name_options']['transliterate_path']) {
+  }
+  if (!$ffp_settings['name_options']['transliterate_filename']) {
+  }
+
+  // @TODO: This is failing on the directory creation with permission denied.
+  file_prepare_directory($new_path, FILE_CREATE_DIRECTORY);
+  file_move($file_entity, 'public://' . $new_path . '/' . $new_name);
 }
 
 // @TODO: Remove this once it's replaced with the new processing code.

@@ -1,7 +1,6 @@
 # Schema for the File (Field) Paths module.
-# @TODO: Pathauto/Transliteration may need additional indenting.
 
-field_config.third_party.filefield_paths:
+field.field.*.*.*.third_party.filefield_paths:
   type: mapping
   label: 'FileField Path settings'
   mapping:
@@ -11,21 +10,29 @@ field_config.third_party.filefield_paths:
     filepath:
       type: string
       label: 'Path'
-    pathauto_path:
-      type: boolean
-      label: 'Path clean with Pathauto'
-    transliteration_path:
-      type: boolean
-      label: 'Transliterate path'
+    path_options:
+      type: mapping
+      label: 'Path options'
+      mapping:
+        pathauto_path:
+          type: boolean
+          label: 'Path clean with Pathauto'
+        transliteration_path:
+          type: boolean
+          label: 'Transliterate path'
     filename:
       type: string
       label: 'Filename'
-    pathauto_name:
-      type: boolean
-      label: 'Filename clean with Pathauto'
-    transliteration_name:
-      type: boolean
-      label: 'Transliterate filename'
+    name_options:
+      type: mapping
+      label: 'Name options'
+      mapping:
+        pathauto_name:
+          type: boolean
+          label: 'Filename clean with Pathauto'
+        transliteration_name:
+          type: boolean
+          label: 'Transliterate filename'
     retroactive_update:
       type: boolean
       label: 'Retroactive'

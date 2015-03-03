@@ -1,5 +1,7 @@
 <?php
 
+use Drupal\pathauto\PathautoManager;
+
 // @TODO: Consider renaming this to ProcessService or Processor instead of ProcessString to be more generic.
 
 /**
@@ -17,9 +19,10 @@ use Drupal\Core\Utility\Token;
 class FileFieldPathsProcessString {
 
   public function tokenReplace($string, $data, $settings = array()){
-    // @TODO: This is just temp code to easily see all available tokens.
-    //$tokens = \Drupal::token()->getInfo();
+    // @TODO: This is just temp code to easily see all available tokens in debugger.
+    $tokens = \Drupal::token()->getInfo();
 
+    // Replace tokens with core Token service.
     $replaced = \Drupal::token()->replace($string, $data);
 
     // Ensure that there are no double-slash sequences due to empty token values.
@@ -39,7 +42,12 @@ class FileFieldPathsProcessString {
     */
   }
 
-  public function pathAutoClean() {
+  public function pathAutoClean($string) {
+
+    $pathauto_manager = \Drupal::service('pathauto.manager');
+    $clean_string = $pathauto_manager->cleanString($string);
+    return $clean_string;
+
     // @TODO: Port this code to D8.
     /*
     $paths = explode('/', $value);

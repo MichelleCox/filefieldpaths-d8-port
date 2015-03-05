@@ -1,5 +1,8 @@
 services:
-  filefield_paths.process_string:
-    class: Drupal\filefield_paths\FileFieldPathsProcessString
-  filefield_paths.batch_update:
-    class: Drupal\filefield_paths\FileFieldPathsBatchUpdate
+  filefield_paths.string_processor:
+    class: Drupal\filefield_paths\FileFieldPathsStringProcessor
+  filefield_paths.batch_updater:
+    class: Drupal\filefield_paths\FileFieldPathsBatchUpdater
+  filefield_paths.manager:
+    class: Drupal\filefield_paths\FileFieldPathsManager
+    arguments: [@filefield_paths.string_processor]

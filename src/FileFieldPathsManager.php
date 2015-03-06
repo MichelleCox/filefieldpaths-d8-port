@@ -106,6 +106,10 @@ class FileFieldPathsManager {
     if (!$this->fieldPathSettings['name_options']['transliterate_filename']) {
     }
 
+    // @TODO: Sanity check to be sure we don't end up with an empty path or name.
+    // If path is empty, just change filename?
+    // If filename is empty, use original?
+
     // Move the file to its new home.
     // @TODO: This is failing on the directory creation with permission denied.
     file_prepare_directory($path, FILE_CREATE_DIRECTORY);

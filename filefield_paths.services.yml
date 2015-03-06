@@ -6,3 +6,5 @@ services:
   filefield_paths.manager:
     class: Drupal\filefield_paths\FileFieldPathsManager
     arguments: [@filefield_paths.string_processor]
+  filefield_paths.settings_manager:
+    class: Drupal\filefield_paths\FileFieldPathsSettingsManager

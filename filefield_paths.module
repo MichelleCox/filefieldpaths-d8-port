@@ -4,7 +4,6 @@
  * Contains core functions for the File (Field) Paths module.
  */
 
-use Drupal\Core\Url;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
@@ -27,197 +26,14 @@ foreach (\Drupal::moduleHandler()->getModuleList() as $module) {
   }
 }
 
-// @TODO: Create a form settings class to hold this and related code.
 /**
  * Implements hook_form_FORM_ID_alter() for 'field_ui_field_edit_form'.
  */
 function filefield_paths_form_field_ui_field_edit_form_alter(array &$form, FormStateInterface $form_state) {
-  $field = $form_state->get('field');
+  // Get the settings manager service to do all the work.
+  $settings_manager = \Drupal::service('filefield_paths.settings_manager');
 
-  // Get our 3rd party settings to use as defaults on the form.
-  $defaults = $field->getThirdPartySettings('filefield_paths');
-
-  // This gets a list of all the field types from enabled modules that responded
-  // to the hook_filefield_paths_field_type_info() invocation. This hook is
-  // currently implemented on behalf of File, Image, and Video in the include
-  // files under the "modules" directory.
-  $field_types = _filefield_paths_get_field_types();
-
-  if (isset($field->field_type) && in_array($field->field_type, array_keys($field_types))) {
-    // @TODO: Hiding directory field doesn't work.
-    // Hide standard File directory field.
-    $form['field']['settings']['file_directory']['#states'] = array(
-      'visible' => array(
-        ':input[name="form[field][third_party_settings][filefield_paths][enabled]"]' => array('checked' => FALSE),
-      ),
-    );
-
-    // FFP fieldset.
-    $form['field']['third_party_settings']['filefield_paths'] = array(
-      '#type' => 'details',
-      '#title' => t('File (Field) Paths settings'),
-      '#open' => TRUE,
-    );
-
-    // Enable / disable.
-    $form['field']['third_party_settings']['filefield_paths']['enabled'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('Enable File (Field) Paths?'),
-      '#default_value' => $defaults['enabled'],
-      '#weight' => -10,
-    );
-
-    // Token browser.
-    $form['field']['third_party_settings']['filefield_paths']['token_tree'] = array(
-      '#type' => '#markup',
-      '#theme' => 'token_tree_link',
-      '#weight' => -5,
-    );
-
-    // File path.
-    $form['field']['third_party_settings']['filefield_paths']['filepath'] = array(
-      '#type' => 'textfield',
-      '#title' => t('File path'),
-      '#maxlength' => 512,
-      '#size' => 128,
-      '#element_validate' => array('_file_generic_settings_file_directory_validate'),
-      '#default_value' => $defaults['filepath'],
-    );
-
-    // File path options fieldset.
-    $form['field']['third_party_settings']['filefield_paths']['path_options'] = array(
-      '#type' => 'details',
-      '#title' => t('File path options'),
-      '#open' => FALSE,
-    );
-
-    // Clean up path with Pathauto.
-    $form['field']['third_party_settings']['filefield_paths']['path_options']['pathauto_path'] = filefield_paths_pathauto_element('filepath', $defaults['path_options']['pathauto_path']);
-
-    // Clean up path with Transliteration
-    $form['field']['third_party_settings']['filefield_paths']['path_options']['transliteration_path'] = filefield_paths_transliteration_element('filepath', $defaults['path_options']['transliteration_path']);
-
-    // File name.
-    $default = (empty($defaults['filename'])) ? '[file:ffp-name-only-original].[file:ffp-extension-original]' : $defaults['filename'];
-    $form['field']['third_party_settings']['filefield_paths']['filename'] = array(
-      '#type' => 'textfield',
-      '#title' => t('File name'),
-      '#maxlength' => 512,
-      '#size' => 128,
-      '#element_validate' => array('_file_generic_settings_file_directory_validate'),
-      '#default_value' => $default,
-    );
-
-    // File name options fieldset.
-    $form['field']['third_party_settings']['filefield_paths']['name_options'] = array(
-      '#type' => 'details',
-      '#title' => t('File name options'),
-      '#open' => FALSE,
-    );
-
-    // Clean up filename with Pathauto.
-    $form['field']['third_party_settings']['filefield_paths']['name_options']['pathauto_filename'] = filefield_paths_pathauto_element('filename', $defaults['name_options']['pathauto_filename']);
-
-    // Clean up filename with Transliteration.
-    $form['field']['third_party_settings']['filefield_paths']['name_options']['transliteration_filename'] = filefield_paths_transliteration_element('filename', $defaults['name_options']['transliteration_filename']);
-
-    // Retroactive updates.
-    $form['field']['third_party_settings']['filefield_paths']['retroactive_update'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('Retroactive update'),
-      '#description' => t('Move and rename previously uploaded files.') . '<div>' . t('<strong class="warning">Warning:</strong> This feature should only be used on developmental servers or with extreme caution.') . '</div>',
-      '#weight' => 11,
-      '#default_value' => $defaults['retroactive_update'],
-    );
-
-    // Active updating.
-    $form['field']['third_party_settings']['filefield_paths']['active_updating'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('Active updating'),
-      '#default_value' => $defaults['active_updating'],
-      '#description' => t('Actively move and rename previously uploaded files as required.') . '<div>' . t('<strong class="warning">Warning:</strong> This feature should only be used on developmental servers or with extreme caution.') . '</div>',
-      '#weight' => 12
-    );
-
-    // @TODO: Uncomment this when retroactive updates are working.
-    // $form['#submit'][] = 'filefield_paths_form_submit';
-  }
-}
-
-/**
- * Returns the form element for the PathAuto checkbox in FFP settings.
- *
- * @param $setting
- *   File path or File name.
- * @param $default
- *   Default or existing value for the form element.
- * @return array
- */
-function filefield_paths_pathauto_element($setting, $default) {
-  if (\Drupal::moduleHandler()->moduleExists('pathauto')) {
-    $pathauto_enabled = TRUE;
-    $description = t('Cleanup %setting using <a href="@pathauto">Pathauto settings</a>.', array(
-      '%setting' => $setting,
-      '@pathauto' => Url::fromRoute('pathauto.settings.form')));
-    $default_value = $default;
-  }
-  else {
-    $pathauto_enabled = FALSE;
-    $description = t('Pathauto is not installed');
-    $default_value = FALSE;
-  }
-
-  return array(
-    '#type' => 'checkbox',
-    '#title' => t('Cleanup using Pathauto'),
-    '#default_value' => $default_value,
-    '#description' => $description,
-    '#disabled' => !$pathauto_enabled,
-  );
-}
-
-/**
- * Returns the form element for the Transliteration checkbox in FFP settings.
- *
- * @param $setting
- *   File path or File name.
- * @param $default
- *   Default or existing value for the form element.
- * @return array
- */
-function filefield_paths_transliteration_element($setting, $default) {
-  if (\Drupal::moduleHandler()->moduleExists('transliteration')) {
-    $transliteration_enabled = TRUE;
-    $description = t('Provides one-way string transliteration (romanization) and cleans the %setting during upload by replacing unwanted characters.', array('%setting' => $setting));
-    $default_value = $default;
-  }
-  else {
-    $transliteration_enabled = FALSE;
-    $description = t('Transliteration is not installed');
-    $default_value = FALSE;
-  }
-
-  return array(
-    '#type' => 'checkbox',
-    '#title' => t('Cleanup using Transliteration'),
-    '#default_value' => $default_value,
-    '#description' => $description,
-    '#disabled' => !$transliteration_enabled,
-  );
-}
-
-/**
- * Submit callback for File (Field) Paths settings form.
- */
-function filefield_paths_form_submit($form, &$form_state) {
-  // TODO: Make retroactive updates work.
-  /*
-  // Retroactive updates.
-  if ($form_state['values']['instance']['settings']['filefield_paths_enabled'] && $form_state['values']['instance']['settings']['filefield_paths']['retroactive_update']) {
-    filefield_paths_batch_update($form_state['values']['instance']);
-    batch_process($form_state['redirect']);
-  }
-  */
+  $settings_manager->alterSettingsForm($form, $form_state);
 }
 
 /**
@@ -250,12 +66,50 @@ function filefield_paths_process_entity(EntityInterface $entity) {
   }
 }
 
-// @TODO: Remove this once it's replaced with the new processing code.
-// This is the original function that is in the process of being absorbed into
-// function filefield_paths_process_field().
+
+/**
+ * @param bool $reset
+ * @return array
+ */
+function _filefield_paths_get_field_types($reset = FALSE) {
+  $field_types = &drupal_static(__FUNCTION__);
+
+  if (empty($field_types) || $reset) {
+    $field_types = \Drupal::moduleHandler()->invokeAll('filefield_paths_field_type_info');
+    $field_types = array_flip($field_types);
+    foreach (array_keys($field_types) as $type) {
+      $info = \Drupal::service('plugin.manager.field.field_type')->getDefinition($type);
+      $field_types[$type] = array(
+        'label' => $info['label']
+      );
+    }
+  }
+
+  return $field_types;
+}
+
+/**
+ * Submit callback for File (Field) Paths settings form.
+ */
+function filefield_paths_form_submit($form, &$form_state) {
+  // TODO: Make retroactive updates work.
+  /*
+  // Retroactive updates.
+  if ($form_state['values']['instance']['settings']['filefield_paths_enabled'] && $form_state['values']['instance']['settings']['filefield_paths']['retroactive_update']) {
+    filefield_paths_batch_update($form_state['values']['instance']);
+    batch_process($form_state['redirect']);
+  }
+  */
+}
+
+
+// @TODO: Remove the rest of the code in this file once it's replaced or absorbed.
+
+
 /**
  * Implements hook_filefield_paths_process_file().
  */
+// @TODO: Original code kept for reference until it is absorbed.
 function filefield_paths_filefield_paths_process_file($type, $entity, $field, $instance, $langcode, &$items) {
   if (isset($instance['settings']['filefield_paths'])) {
     $settings = $instance['settings']['filefield_paths'];
@@ -349,7 +203,7 @@ function _filefield_paths_replace_path($old, $new, $entity) {
 // 
 // @see https://www.drupal.org/node/2012896
 // $fields = field_info_fields();
-
+/*
   foreach ($fields as $name => $field) {
     if ($field['module'] == 'text' && isset($entity->{$field['field_name']}) && is_array($entity->{$field['field_name']})) {
       foreach ($entity->{$field['field_name']} as &$language) {
@@ -362,6 +216,7 @@ function _filefield_paths_replace_path($old, $new, $entity) {
       }
     }
   }
+*/
 }
 
 /**
@@ -399,30 +254,6 @@ function _filefield_paths_replace_image_derivative_token($old_uri, $new_uri, $qu
     return substr_replace($query_string, image_style_path_token($style_name, $new_uri), -strlen($token));
   }
   return $query_string;
-}
-
-
-
-/**
- * @param bool $reset
- * @return array
- */
-function _filefield_paths_get_field_types($reset = FALSE) {
-  // @TODO: Original code kept for reference until it is absorbed.
-  $field_types = &drupal_static(__FUNCTION__);
-
-  if (empty($field_types) || $reset) {
-    $field_types = \Drupal::moduleHandler()->invokeAll('filefield_paths_field_type_info');
-    $field_types = array_flip($field_types);
-    foreach (array_keys($field_types) as $type) {
-      $info = \Drupal::service('plugin.manager.field.field_type')->getDefinition($type);
-      $field_types[$type] = array(
-        'label' => $info['label']
-      );
-    }
-  }
-
-  return $field_types;
 }
 
 /**

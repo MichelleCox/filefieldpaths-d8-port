@@ -111,9 +111,9 @@ class FileFieldPathsManager {
     // If filename is empty, use original?
 
     // Move the file to its new home.
-    // @TODO: This is failing on the directory creation with permission denied.
-    file_prepare_directory($path, FILE_CREATE_DIRECTORY);
-    file_move($file_entity, 'public://' . $path . '/' . $filename);
+    $destination = file_build_uri($path);
+    file_prepare_directory($destination, FILE_CREATE_DIRECTORY);
+    file_move($file_entity, $destination . DIRECTORY_SEPARATOR . $filename);
   }
 
 }

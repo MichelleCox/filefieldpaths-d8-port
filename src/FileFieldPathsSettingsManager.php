@@ -8,26 +8,19 @@ use Drupal\Core\Url;
 
 class FileFieldPathsSettingsManager {
 
+  /**
+   * Performs form alterations to the field settings form.
+   *
+   * @param array $form
+   * @param FormStateInterface $form_state
+   */
   public function alterSettingsForm(array &$form, FormStateInterface $form_state) {
     $field = $form_state->get('field');
+    $file_field_types = _filefield_paths_get_field_types();
 
-    // Get our 3rd party settings to use as defaults on the form.
-    $defaults = $field->getThirdPartySettings('filefield_paths');
-
-    // This gets a list of all the field types from enabled modules that responded
-    // to the hook_filefield_paths_field_type_info() invocation. This hook is
-    // currently implemented on behalf of File, Image, and Video in the include
-    // files under the "modules" directory.
-    $field_types = _filefield_paths_get_field_types();
-
-    if (isset($field->field_type) && in_array($field->field_type, array_keys($field_types))) {
-      // @TODO: Hiding directory field doesn't work.
-      // Hide standard File directory field.
-      $form['field']['settings']['file_directory']['#states'] = array(
-        'visible' => array(
-          ':input[name="form[field][third_party_settings][filefield_paths][enabled]"]' => array('checked' => FALSE),
-        ),
-      );
+    if (isset($field->field_type) && in_array($field->field_type, $file_field_types)) {
+      // Get our 3rd party settings to use as defaults on the form.
+      $defaults = $field->getThirdPartySettings('filefield_paths');
 
       // FFP fieldset.
       $form['field']['third_party_settings']['filefield_paths'] = array(
@@ -43,6 +36,16 @@ class FileFieldPathsSettingsManager {
         '#title' => t('Enable File (Field) Paths?'),
         '#default_value' => $default,
         '#weight' => -10,
+      );
+
+      // @TODO: Hiding directory field doesn't work.
+      // Hide standard File directory field.
+      $form['field']['settings']['file_directory']['#states'] = array(
+        '#states' => array(
+          '!visible' => array(
+            ':input[name="field[third_party_settings][filefield_paths][enabled]"]' => array('value' => '1'),
+          )
+        ),
       );
 
       // Token browser.

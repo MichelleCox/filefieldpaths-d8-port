@@ -42,7 +42,7 @@ class FileFieldPathsManager {
         $field_type = $field_info->getType();
 
         // Check the field type against our list of fields.
-        if (isset($field_type) && in_array($field_type, array_keys($field_types))) {
+        if (isset($field_type) && in_array($field_type, $field_types)) {
           $this->processField($field_info);
         }
       }

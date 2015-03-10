@@ -99,13 +99,21 @@ class FileFieldPathsManager {
       $filename = $cleaned_base . '.' . $cleaned_extension;
     }
 
-    // Transliterate.
-    // @TODO: Make transliteration work.
-    if (!$this->fieldPathSettings['name_options']['transliterate_path']) {
+    // Transliterate: core only - this does not support the transliteration module.
+    if ($this->fieldPathSettings['path_options']['transliteration_path'] || $this->fieldPathSettings['name_options']['transliteration_filename']) {
+      // Use the current default interface language.
+      $langcode = \Drupal::languageManager()->getCurrentLanguage()->getId();
+      // Instantiate the transliteration class.
+      $trans = \Drupal::transliteration();
+      if ($this->fieldPathSettings['path_options']['transliteration_path']) {
+        // Use this to transliterate the path.
+        $path = $trans->transliterate($path, $langcode);
+      }
+      if ($this->fieldPathSettings['name_options']['transliteration_filename']) {
+        // Use this to transliterate the file name.
+        $filename = $trans->transliterate($filename, $langcode);
+      }
     }
-    if (!$this->fieldPathSettings['name_options']['transliterate_filename']) {
-    }
-
     // @TODO: Sanity check to be sure we don't end up with an empty path or name.
     // If path is empty, just change filename?
     // If filename is empty, use original?

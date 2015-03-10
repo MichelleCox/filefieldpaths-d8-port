@@ -173,22 +173,18 @@ class FileFieldPathsSettingsManager {
    */
   protected function getTransliterationElement($setting, $default) {
     if (\Drupal::moduleHandler()->moduleExists('transliteration')) {
-      $transliteration_enabled = TRUE;
       $description = t('Provides one-way string transliteration (romanization) and cleans the %setting during upload by replacing unwanted characters.', array('%setting' => $setting));
-      $default_value = $default;
     }
     else {
-      $transliteration_enabled = FALSE;
-      $description = t('Transliteration is not installed');
-      $default_value = FALSE;
+      $description = t('The Transliteration module is not installed, but you can use transliteration functionality from Drupal Core.');
     }
 
     return array(
       '#type' => 'checkbox',
       '#title' => t('Cleanup using Transliteration'),
-      '#default_value' => $default_value,
+      '#default_value' => $default,
       '#description' => $description,
-      '#disabled' => !$transliteration_enabled,
+      '#disabled' => FALSE,
     );
   }
 

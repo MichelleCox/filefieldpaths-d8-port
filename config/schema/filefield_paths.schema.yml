@@ -14,10 +14,10 @@ field.field.*.*.*.third_party.filefield_paths:
       type: mapping
       label: 'Path options'
       mapping:
-        pathauto_path:
+        clean_path:
           type: boolean
           label: 'Path clean with Pathauto'
-        transliteration_path:
+        transliterate_path:
           type: boolean
           label: 'Transliterate path'
     filename:
@@ -27,10 +27,10 @@ field.field.*.*.*.third_party.filefield_paths:
       type: mapping
       label: 'Name options'
       mapping:
-        pathauto_name:
+        clean_name:
           type: boolean
           label: 'Filename clean with Pathauto'
-        transliteration_name:
+        transliterate_name:
           type: boolean
           label: 'Transliterate filename'
     retroactive_update:

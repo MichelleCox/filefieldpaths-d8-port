@@ -2,29 +2,75 @@
 
 namespace Drupal\filefield_paths;
 
-use Drupal\file\Entity\File;
-use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Config\Entity\ThirdPartySettingsInterface;
 
 class FileFieldPathsManager {
-  protected $stringProcessor;
+  /**
+   * String cleaning service.
+   *
+   * @var FileFieldPathsClean
+   */
+  protected $cleanService;
+
+  /**
+   * Token handling service.
+   *
+   * @var FileFieldPathsToken
+   */
+  protected $tokenService;
+
+  /**
+   * Transliteration service.
+   *
+   * @var FileFieldPathsTransliterate
+   */
+  protected $transliterateService;
+
+  /**
+   * Content entity being processed.
+   *
+   * @var ContentEntityInterface
+   */
   protected $contentEntity;
+
+  /**
+   * Holds the settings for the field being processed.
+   *
+   * @var Array
+   */
   protected $fieldPathSettings;
 
-  public function __construct(FileFieldPathsStringProcessor $processor) {
-    // The processor handles cleaning up strings and token replacement.
-    $this->stringProcessor = $processor;
+  public function __construct(FileFieldPathsClean $clean,
+                              FileFieldPathsToken $token,
+                              FileFieldPathsTransliterate $transliterate) {
+    $this->cleanService = $clean;
+    $this->tokenService = $token;
+    $this->transliterateService = $transliterate;
   }
 
+  /**
+   * Sets the property that holds a reference to the entity being processed.
+   *
+   * @param ContentEntityInterface $entity
+   */
   public function setContentEntity(ContentEntityInterface $entity) {
     $this->contentEntity = $entity;
   }
 
+  /**
+   * Sets the property that holds the settings for the field in processing.
+   *
+   * @param array $settings
+   */
   protected function setFieldPathSettings(array $settings) {
     $this->fieldPathSettings = $settings;
   }
 
+  /*
+   * Finds all the file based fields on a content entity and sends them off
+   * to be processed.
+   */
   public function processContentEntity() {
     if ($this->contentEntity instanceof ContentEntityInterface) {
       // Get a list of the types of fields that have files. (File, integer, video)
@@ -49,7 +95,12 @@ class FileFieldPathsManager {
     }
   }
 
-  public function processField(ThirdPartySettingsInterface $field_info) {
+  /**
+   * Finds all the files on the field and sends them to be processed.
+   *
+   * @param ThirdPartySettingsInterface $field_info
+   */
+  protected function processField(ThirdPartySettingsInterface $field_info) {
     // Retrieve the settings we added to the field.
     $this->setFieldPathSettings($field_info->getThirdPartySettings('filefield_paths'));
 
@@ -70,7 +121,12 @@ class FileFieldPathsManager {
     }
   }
 
-  public function processFile($file_entity) {
+  /**
+   * Cleans up path and name, moves to new location, and renames.
+   *
+   * @param $file_entity
+   */
+  protected function processFile($file_entity) {
     // Retrieve the path/name strings with the tokens from settings.
     $tokenized_path = $this->fieldPathSettings['filepath'];
     $tokenized_filename = $this->fieldPathSettings['filename'];
@@ -78,42 +134,36 @@ class FileFieldPathsManager {
     // Replace tokens.
     $entity_type = $this->contentEntity->getEntityTypeId();
     $data = array($entity_type => $this->contentEntity, 'file' => $file_entity);
-    $path = $this->stringProcessor->tokenReplace($tokenized_path, $data);
-    $filename = $this->stringProcessor->tokenReplace($tokenized_filename, $data);
+    $path = $this->tokenService->tokenReplace($tokenized_path, $data);
+    $filename = $this->tokenService->tokenReplace($tokenized_filename, $data);
 
-    // Clean with PathAuto.
-    if ($this->fieldPathSettings['path_options']['pathauto_path']) {
+    // Transliterate.
+    if ($this->fieldPathSettings['path_options']['transliterate_path']) {
+      $path = $this->transliterateService->transliterate($path);
+    }
+
+    if ($this->fieldPathSettings['name_options']['transliterate_filename']) {
+      $filename = $this->transliterateService->transliterate($filename);
+    }
+
+    // Clean string to remove URL unfriendly characters.
+    if ($this->fieldPathSettings['path_options']['clean_path']) {
       $path_segments = explode("/", $path);
       $cleaned_segments = array();
       foreach ($path_segments as $segment) {
-        $cleaned_segments[] = $this->stringProcessor->pathAutoClean($segment);
+        $cleaned_segments[] = $this->cleanService->cleanString($segment);
       }
       $path = implode("/", $cleaned_segments);
     }
 
-    if ($this->fieldPathSettings['name_options']['pathauto_filename']) {
+    if ($this->fieldPathSettings['name_options']['clean_filename']) {
       $name_parts = pathinfo($filename);
-      $cleaned_base = $this->stringProcessor->pathAutoClean($name_parts['filename']);
-      $cleaned_extension = $this->stringProcessor->pathAutoClean($name_parts['extension']);
+      $cleaned_base = $this->cleanService->cleanString($name_parts['filename']);
+      $cleaned_extension = $this->cleanService->cleanString($name_parts['extension']);
 
       $filename = $cleaned_base . '.' . $cleaned_extension;
     }
 
-    // Transliterate: core only - this does not support the transliteration module.
-    if ($this->fieldPathSettings['path_options']['transliteration_path'] || $this->fieldPathSettings['name_options']['transliteration_filename']) {
-      // Use the current default interface language.
-      $langcode = \Drupal::languageManager()->getCurrentLanguage()->getId();
-      // Instantiate the transliteration class.
-      $trans = \Drupal::transliteration();
-      if ($this->fieldPathSettings['path_options']['transliteration_path']) {
-        // Use this to transliterate the path.
-        $path = $trans->transliterate($path, $langcode);
-      }
-      if ($this->fieldPathSettings['name_options']['transliteration_filename']) {
-        // Use this to transliterate the file name.
-        $filename = $trans->transliterate($filename, $langcode);
-      }
-    }
     // @TODO: Sanity check to be sure we don't end up with an empty path or name.
     // If path is empty, just change filename?
     // If filename is empty, use original?

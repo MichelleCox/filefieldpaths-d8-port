@@ -7,6 +7,18 @@ use Drupal\Core\Url;
 
 
 class FileFieldPathsSettingsManager {
+  protected $cleanService;
+  protected $tokenService;
+  protected $transliterateService;
+  protected $fieldPathSettings;
+
+  public function __construct(FileFieldPathsClean $clean,
+                              FileFieldPathsToken $token,
+                              FileFieldPathsTransliterate $transliterate) {
+    $this->cleanService = $clean;
+    $this->tokenService = $token;
+    $this->transliterateService = $transliterate;
+  }
 
   /**
    * Performs form alterations to the field settings form.
@@ -49,11 +61,7 @@ class FileFieldPathsSettingsManager {
       );
 
       // Token browser.
-      $form['field']['third_party_settings']['filefield_paths']['token_tree'] = array(
-        '#type' => '#markup',
-        '#theme' => 'token_tree_link',
-        '#weight' => -5,
-      );
+      $form['field']['third_party_settings']['filefield_paths']['token_tree'] = $this->tokenService->tokenBrowser();
 
       // File path.
       $default = isset($defaults['filepath']) ? $defaults['filepath'] : '';
@@ -73,13 +81,13 @@ class FileFieldPathsSettingsManager {
         '#open' => FALSE,
       );
 
-      // Clean up path with Pathauto.
-      $default = isset($defaults['path_options']['pathauto_path']) ? $defaults['path_options']['pathauto_path'] : FALSE;
-      $form['field']['third_party_settings']['filefield_paths']['path_options']['pathauto_path'] = $this->getPathAutoElement('filepath', $default);
+      // Clean up path.
+      $default = isset($defaults['path_options']['clean_path']) ? $defaults['path_options']['clean_path'] : TRUE;
+      $form['field']['third_party_settings']['filefield_paths']['path_options']['clean_path'] = $this->getStringCleanElement('filepath', $default);
 
-      // Clean up path with Transliteration
-      $default = isset($defaults['path_options']['transliteration_path']) ? $defaults['path_options']['transliteration_path'] : FALSE;
-      $form['field']['third_party_settings']['filefield_paths']['path_options']['transliteration_path'] = $this->getTransliterationElement('filepath', $default);
+      // Transliterate path.
+      $default = isset($defaults['path_options']['transliterate_path']) ? $defaults['path_options']['transliterate_path'] : TRUE;
+      $form['field']['third_party_settings']['filefield_paths']['path_options']['transliterate_path'] = $this->getTransliterationElement('filepath', $default);
 
       // File name.
       $default = (isset($defaults['filename']) && !empty($defaults['filename'])) ? $defaults['filename'] : '[file:ffp-name-only-original].[file:ffp-extension-original]';
@@ -99,13 +107,13 @@ class FileFieldPathsSettingsManager {
         '#open' => FALSE,
       );
 
-      // Clean up filename with Pathauto.
-      $default = isset($defaults['name_options']['pathauto_filename']) ? $defaults['name_options']['pathauto_filename'] : FALSE;
-      $form['field']['third_party_settings']['filefield_paths']['name_options']['pathauto_filename'] = $this->getPathAutoElement('filename', $default);
+      // Clean up filename.
+      $default = isset($defaults['name_options']['clean_filename']) ? $defaults['name_options']['clean_filename'] : TRUE;
+      $form['field']['third_party_settings']['filefield_paths']['name_options']['clean_filename'] = $this->getStringCleanElement('filename', $default);
 
-      // Clean up filename with Transliteration.
-      $default = isset($defaults['name_options']['transliteration_filename']) ? $defaults['name_options']['transliteration_filename'] : FALSE;
-      $form['field']['third_party_settings']['filefield_paths']['name_options']['transliteration_filename'] = $this->getTransliterationElement('filename', $default);
+      // Transliterate filename.
+      $default = isset($defaults['name_options']['transliterate_filename']) ? $defaults['name_options']['transliterate_filename'] : TRUE;
+      $form['field']['third_party_settings']['filefield_paths']['name_options']['transliterate_filename'] = $this->getTransliterationElement('filename', $default);
 
       // Retroactive updates.
       $default = isset($defaults['retroactive_update']) ? $defaults['retroactive_update'] : FALSE;
@@ -142,26 +150,22 @@ class FileFieldPathsSettingsManager {
    *   Default or existing value for the form element.
    * @return array
    */
-  protected function getPathAutoElement($setting, $default) {
+  protected function getStringCleanElement($setting, $default) {
     if (\Drupal::moduleHandler()->moduleExists('pathauto')) {
-      $pathauto_enabled = TRUE;
       $description = t('Cleanup %setting using <a href="@pathauto">Pathauto settings</a>.', array(
         '%setting' => $setting,
         '@pathauto' => Url::fromRoute('pathauto.settings.form')));
-      $default_value = $default;
     }
     else {
-      $pathauto_enabled = FALSE;
-      $description = t('Pathauto is not installed');
-      $default_value = FALSE;
+      $description = t('Basic cleanup such as changing non alphanumeric characters to hyphens. More advanced cleanup can be done if PathAuto is installed.');
     }
 
     return array(
       '#type' => 'checkbox',
-      '#title' => t('Cleanup using Pathauto'),
-      '#default_value' => $default_value,
+      '#title' => t('Clean up %setting', array('%setting' => $setting)),
+      '#default_value' => $default,
       '#description' => $description,
-      '#disabled' => !$pathauto_enabled,
+      '#disabled' => FALSE,
     );
   }
 

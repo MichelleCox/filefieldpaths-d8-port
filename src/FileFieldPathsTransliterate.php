@@ -13,7 +13,7 @@ namespace Drupal\filefield_paths;
 class FileFieldPathsTransliterate {
 
   /**
-   * Gatekeeper function to directo to either core or contrib transliteration.
+   * Gatekeeper function to direct to either core or contrib transliteration.
    *
    * @param $string
    * @return string

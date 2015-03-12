@@ -67,7 +67,7 @@ function _filefield_paths_get_field_types($reset = FALSE) {
 
     // Build a list of the ones based on FileFieldItemList.
     $file_field_types = array();
-    foreach($types as $name => $type) {
+    foreach ($types as $name => $type) {
       if ($type['list_class'] == '\Drupal\file\Plugin\Field\FieldType\FileFieldItemList') {
         $file_field_types[] = $name;
       }

@@ -4,6 +4,7 @@ namespace Drupal\filefield_paths;
 
 use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Config\Entity\ThirdPartySettingsInterface;
+use Drupal\file\FileInterface;
 
 class FileFieldPathsManager {
   /**
@@ -117,52 +118,68 @@ class FileFieldPathsManager {
    *
    * @param $file_entity
    */
-  protected function processFile(ContentEntityInterface $container_entity, $file_entity) {
-    // Retrieve the path/name strings with the tokens from settings.
-    $tokenized_path = $this->fieldPathSettings['filepath'];
-    $tokenized_filename = $this->fieldPathSettings['filename'];
+  protected function processFile(ContentEntityInterface $container_entity, FileInterface $file_entity) {
+    if ($this->fileNeedsUpdating($file_entity)) {
+      // Retrieve the path/name strings with the tokens from settings.
+      $tokenized_path = $this->fieldPathSettings['filepath'];
+      $tokenized_filename = $this->fieldPathSettings['filename'];
 
-    // Replace tokens.
-    $entity_type = $container_entity->getEntityTypeId();
-    $data = array($entity_type => $container_entity, 'file' => $file_entity);
-    $path = $this->tokenService->tokenReplace($tokenized_path, $data);
-    $filename = $this->tokenService->tokenReplace($tokenized_filename, $data);
+      // Replace tokens.
+      $entity_type = $container_entity->getEntityTypeId();
+      $data = array($entity_type => $container_entity, 'file' => $file_entity);
+      $path = $this->tokenService->tokenReplace($tokenized_path, $data);
+      $filename = $this->tokenService->tokenReplace($tokenized_filename, $data);
 
-    // Transliterate.
-    if ($this->fieldPathSettings['path_options']['transliterate_path']) {
-      $path = $this->transliterateService->transliterate($path);
-    }
-
-    if ($this->fieldPathSettings['name_options']['transliterate_filename']) {
-      $filename = $this->transliterateService->transliterate($filename);
-    }
-
-    // Clean string to remove URL unfriendly characters.
-    if ($this->fieldPathSettings['path_options']['clean_path']) {
-      $path_segments = explode("/", $path);
-      $cleaned_segments = array();
-      foreach ($path_segments as $segment) {
-        $cleaned_segments[] = $this->cleanService->cleanString($segment);
+      // Transliterate.
+      if ($this->fieldPathSettings['path_options']['transliterate_path']) {
+        $path = $this->transliterateService->transliterate($path);
       }
-      $path = implode("/", $cleaned_segments);
+
+      if ($this->fieldPathSettings['name_options']['transliterate_filename']) {
+        $filename = $this->transliterateService->transliterate($filename);
+      }
+
+      // Clean string to remove URL unfriendly characters.
+      if ($this->fieldPathSettings['path_options']['clean_path']) {
+        $path_segments = explode("/", $path);
+        $cleaned_segments = array();
+        foreach ($path_segments as $segment) {
+          $cleaned_segments[] = $this->cleanService->cleanString($segment);
+        }
+        $path = implode("/", $cleaned_segments);
+      }
+
+      if ($this->fieldPathSettings['name_options']['clean_filename']) {
+        $name_parts = pathinfo($filename);
+        $cleaned_base = $this->cleanService->cleanString($name_parts['filename']);
+        $cleaned_extension = $this->cleanService->cleanString($name_parts['extension']);
+
+        $filename = $cleaned_base . '.' . $cleaned_extension;
+      }
+
+      // @TODO: Sanity check to be sure we don't end up with an empty path or name.
+      // If path is empty, just change filename?
+      // If filename is empty, use original?
+
+      // Move the file to its new home.
+      $destination = file_build_uri($path);
+      file_prepare_directory($destination, FILE_CREATE_DIRECTORY);
+      file_move($file_entity, $destination . DIRECTORY_SEPARATOR . $filename);
     }
+  }
 
-    if ($this->fieldPathSettings['name_options']['clean_filename']) {
-      $name_parts = pathinfo($filename);
-      $cleaned_base = $this->cleanService->cleanString($name_parts['filename']);
-      $cleaned_extension = $this->cleanService->cleanString($name_parts['extension']);
-
-      $filename = $cleaned_base . '.' . $cleaned_extension;
-    }
-
-    // @TODO: Sanity check to be sure we don't end up with an empty path or name.
-    // If path is empty, just change filename?
-    // If filename is empty, use original?
-
-    // Move the file to its new home.
-    $destination = file_build_uri($path);
-    file_prepare_directory($destination, FILE_CREATE_DIRECTORY);
-    file_move($file_entity, $destination . DIRECTORY_SEPARATOR . $filename);
+  /**
+   * Determines if a given file should be updated.
+   *
+   * @param FileInterface $file_entity
+   * @return bool
+   */
+  protected function fileNeedsUpdating(FileInterface $file_entity) {
+    // If this field is using active updating, then we always update.
+    // If the file is newly uploaded, then we update. Otherwise, leave it alone.
+    // Note: $file_entity->isNew() was not accurate for this.
+    $file_is_new = ($file_entity->getChangedTime() == REQUEST_TIME);
+    return ($this->fieldPathSettings['active_updating'] || $file_is_new);
   }
 
 }

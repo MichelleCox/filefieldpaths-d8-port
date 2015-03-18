@@ -48,16 +48,7 @@ class FileFieldPathsManager {
     $this->tokenService = $token;
     $this->transliterateService = $transliterate;
   }
-
-  /**
-   * Sets the property that holds a reference to the entity being processed.
-   *
-   * @param ContentEntityInterface $entity
-   */
-  public function setContentEntity(ContentEntityInterface $entity) {
-    $this->contentEntity = $entity;
-  }
-
+  
   /**
    * Sets the property that holds the settings for the field in processing.
    *
@@ -71,13 +62,13 @@ class FileFieldPathsManager {
    * Finds all the file based fields on a content entity and sends them off
    * to be processed.
    */
-  public function processContentEntity() {
-    if ($this->contentEntity instanceof ContentEntityInterface) {
+  public function processContentEntity(ContentEntityInterface $container_entity) {
+    if ($container_entity instanceof ContentEntityInterface) {
       // Get a list of the types of fields that have files. (File, integer, video)
       $field_types = _filefield_paths_get_field_types();
 
       // Get a list of the fields on this entity.
-      $fields = $this->contentEntity->getFields();
+      $fields = $container_entity->getFields();
 
       // Iterate through all the fields looking for ones in our list.
       foreach ($fields as $key => $field) {
@@ -89,7 +80,7 @@ class FileFieldPathsManager {
 
         // Check the field type against our list of fields.
         if (isset($field_type) && in_array($field_type, $field_types)) {
-          $this->processField($field_info);
+          $this->processField($container_entity, $field_info);
         }
       }
     }
@@ -100,7 +91,7 @@ class FileFieldPathsManager {
    *
    * @param ThirdPartySettingsInterface $field_info
    */
-  protected function processField(ThirdPartySettingsInterface $field_info) {
+  protected function processField(ContentEntityInterface $container_entity, ThirdPartySettingsInterface $field_info) {
     // Retrieve the settings we added to the field.
     $this->setFieldPathSettings($field_info->getThirdPartySettings('filefield_paths'));
 
@@ -111,12 +102,12 @@ class FileFieldPathsManager {
       $field_name = $field_info->field_name;
 
       // Go through each item on the field.
-      foreach ($this->contentEntity->{$field_name} as $item) {
+      foreach ($container_entity->{$field_name} as $item) {
         // Get the file entity associated with the item.
         $file_entity = $item->entity;
 
         // Process the file.
-        $this->processFile($file_entity);
+        $this->processFile($container_entity, $file_entity);
       }
     }
   }
@@ -126,14 +117,14 @@ class FileFieldPathsManager {
    *
    * @param $file_entity
    */
-  protected function processFile($file_entity) {
+  protected function processFile(ContentEntityInterface $container_entity, $file_entity) {
     // Retrieve the path/name strings with the tokens from settings.
     $tokenized_path = $this->fieldPathSettings['filepath'];
     $tokenized_filename = $this->fieldPathSettings['filename'];
 
     // Replace tokens.
-    $entity_type = $this->contentEntity->getEntityTypeId();
-    $data = array($entity_type => $this->contentEntity, 'file' => $file_entity);
+    $entity_type = $container_entity->getEntityTypeId();
+    $data = array($entity_type => $container_entity, 'file' => $file_entity);
     $path = $this->tokenService->tokenReplace($tokenized_path, $data);
     $filename = $this->tokenService->tokenReplace($tokenized_filename, $data);
 

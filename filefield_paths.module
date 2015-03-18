@@ -44,11 +44,8 @@ function filefield_paths_process_entity(EntityInterface $entity) {
     // Get the manager service to do all the work.
     $manager = \Drupal::service('filefield_paths.manager');
 
-    // Tell it about the containing entity (ie: node)
-    $manager->setContentEntity($entity);
-
     // Process all the fields on it.
-    $manager->processContentEntity();
+    $manager->processContentEntity($entity);
   }
 }
 

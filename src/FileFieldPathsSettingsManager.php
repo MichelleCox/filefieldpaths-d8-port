@@ -154,7 +154,7 @@ class FileFieldPathsSettingsManager {
     if (\Drupal::moduleHandler()->moduleExists('pathauto')) {
       $description = t('Cleanup %setting using <a href="@pathauto">Pathauto settings</a>.', array(
         '%setting' => $setting,
-        '@pathauto' => Url::fromRoute('pathauto.settings.form')));
+        '@pathauto' => Url::fromRoute('pathauto.settings.form')->toString()));
     }
     else {
       $description = t('Basic cleanup such as changing non alphanumeric characters to hyphens. More advanced cleanup can be done if PathAuto is installed.');
